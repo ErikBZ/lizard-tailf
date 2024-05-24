@@ -5,20 +5,52 @@ const process = std.process;
 
 const DEFAULT_LINES = 10;
 
+const CommandLineArgs = struct {
+    number_of_lines: u32,
+    files: ArrayList([]const u8),
+    follow: bool,
+};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var args = process.args();
-    _ = args.skip();
+    const command_lines_args = try get_command_line_args(allocator);
 
-    const path = args.next();
-
-    if (path) |good_path| {
-        try dumb_tail(good_path, allocator);
+    if (command_lines_args.files.items.len > 0) {
+        for (command_lines_args.files.items) |path| {
+            if (command_lines_args.files.items.len > 1) {
+                std.debug.print("==> {s} <==\n\n", .{path});
+            }
+            try dumb_tail(path, allocator);
+        }
     } else {
         print_usage();
     }
+
+    for (command_lines_args.files.items) |path| {
+        allocator.free(path);
+    }
+    command_lines_args.files.deinit();
+}
+
+fn get_command_line_args(allocator: Allocator) !CommandLineArgs {
+    var args = process.args();
+    _ = args.skip();
+
+    var paths = ArrayList([]const u8).init(allocator);
+
+    while (args.next()) |path| {
+        const next_path: []u8 = try allocator.alloc(u8, path.len);
+        std.mem.copyForwards(u8, next_path, path);
+        try paths.append(next_path);
+    }
+
+    return CommandLineArgs{
+        .number_of_lines = 10,
+        .files = paths,
+        .follow = false,
+    };
 }
 
 fn print_usage() void {
